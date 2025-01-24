@@ -26,10 +26,10 @@ def ctc_cnn(params):
     # Convolutional blocks
     x = input
     for i in range(params["conv_blocks"]):
-        x = tf.keras.layers.Conv2D(filters=params["conv_filter_n"][i],kernel_size=params["conv_filter_size"][i],padding="same",activation=None)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Conv2D(filters=params["conv_filter_n"][i],kernel_size=params["conv_filter_size"][i],padding="same",activation=None)
+        x = tf.keras.layers.BatchNormalization(x)
         x = leaky_relu(x)
-        x = tf.keras.layers.MaxPooling2D(pool_size=params["conv_pooling_size"][i],strides=params["conv_pooling_size"][i])(x)
+        x = tf.keras.layers.MaxPooling2D(inputs=x,pool_size=params["conv_pooling_size"][i],strides=params["conv_pooling_size"][i])
         width_reduction = width_reduction*params["conv_pooling_size"][i][1]
         height_reduction = height_reduction*params["conv_pooling_size"][i][0]
     
