@@ -310,3 +310,4 @@ def create_musicxml(input_notation):
 # Output the result to a MusicXML file
 # with open('output.txt', 'w') as f:
     #f.write(musicxml_output)
+
