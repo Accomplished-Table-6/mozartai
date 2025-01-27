@@ -226,7 +226,8 @@ def create_musicxml(input_notation):
     divisions_1 = ET.SubElement(division, "divisions").text = str(8)
     divisions = 8
 
-    for command in len(input_notation):
+    for i in range(len(input_notation)):
+        command = input_notation[i]
         def extractor(pattern, string):
             match = re.search(pattern, string)
             return match.group(0) if match else None
@@ -265,7 +266,7 @@ def create_musicxml(input_notation):
 
         elif command.startswith('rest-'):
             rest_info = rest_dict.get(command)
-            if rest_info:
+            if rest_info[2] == 0:
                 note = ET.SubElement(current_measure, 'note')
                 ET.SubElement(note, 'rest')
                 ET.SubElement(note, 'duration').text = str(rest_info[0] * divisions)
