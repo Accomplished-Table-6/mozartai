@@ -277,22 +277,20 @@ def create_musicxml(input_notation):
 
         elif command.startswith('note-'):
             pitch_match = extractor(r"(-.*?_)", command)
-            time_match = extractor(r"(?<=_)(.*)", command)
-            if pitch_match and time_match:
-                note_pitch_stuff = note_pitch_dict.get(pitch_match)
-                note_time_stuff = note_time_dict.get(time_match)
-                if note_pitch_stuff and note_time_stuff:
-                    note = ET.SubElement(current_measure, 'note')
-                    pitch = ET.SubElement(note, 'pitch')
-                    ET.SubElement(pitch, 'step').text = note_pitch_stuff[0]
-                    ET.SubElement(pitch, "octave").text = str(note_pitch_stuff[1])
-                    if note_pitch_stuff[2] != 0:
-                        ET.SubElement(pitch, "alter").text = str(note_pitch_stuff[2])
-                    ET.SubElement(note, 'duration').text = str(note_time_stuff[0] * divisions)
-                    ET.SubElement(note, 'type').text = note_time_stuff[1]
-                    if note_time_stuff[2] > 0:
-                        for _ in range(note_time_stuff[2]):
-                            ET.SubElement(note, "dot")
+            time_match = extractor(r"(_.*)", command)
+            note_pitch_stuff = note_pitch_dict.get(pitch_match)
+            note_time_stuff = note_time_dict.get(time_match)
+            note = ET.SubElement(current_measure, 'note')
+            pitch = ET.SubElement(note, 'pitch')
+            ET.SubElement(pitch, 'step').text = note_pitch_stuff[0]
+            ET.SubElement(pitch, "octave").text = str(note_pitch_stuff[1])
+            if note_pitch_stuff[2] != 0:
+                ET.SubElement(pitch, "alter").text = str(note_pitch_stuff[2])
+            ET.SubElement(note, 'duration').text = str(note_time_stuff[0] * divisions)
+            ET.SubElement(note, 'type').text = note_time_stuff[1]
+            if note_time_stuff[2] > 0:
+                for _ in range(note_time_stuff[2]):
+                    ET.SubElement(note, "dot")
 
         elif command == 'barline':
             n += 1
@@ -306,13 +304,9 @@ def create_musicxml(input_notation):
 
 
 # Example input notation
-input_notation = ['clef-C1', 'keySignature-EbM', 'timeSignature-2/4', 'multirest-23', 'barline', 'rest-quarter', 'rest-eighth', 'note-Bb4_eighth', 'barline', 'note-Bb4_quarter.', 'note-G4_eighth', 'barline', 'note-Eb5_quarter.', 'note-D5_eighth', 'barline', 'note-C5_eighth', 'note-C5_eighth', 'rest-quarter']
+# input_notation = ['clef-C1', 'keySignature-EbM', 'timeSignature-2/4', 'multirest-23', 'barline', 'rest-quarter', 'rest-eighth', 'note-Bb4_eighth', 'barline', 'note-Bb4_quarter.', 'note-G4_eighth', 'barline', 'note-Eb5_quarter.', 'note-D5_eighth', 'barline', 'note-C5_eighth', 'note-C5_eighth', 'rest-quarter']
 
-# Convert to MusicXML
-musicxml_output = create_musicxml(input_notation)
-print(musicxml_output)
 
 # Output the result to a MusicXML file
 # with open('output.txt', 'w') as f:
     #f.write(musicxml_output)
-
