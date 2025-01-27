@@ -92,7 +92,6 @@ try:
     str_predictions = mozart_utils.sparse_tensor_to_strs(prediction)
     result = [int2word.get(w, "Unknown") for w in str_predictions[0]]
     print(result)
-    return result
 except Exception as e:
     print(f"Error during prediction: {e}")
     exit(1)
