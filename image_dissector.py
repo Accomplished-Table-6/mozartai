@@ -2,6 +2,46 @@ import cv2
 import numpy as np
 import os
 from glob import glob
+import pytesseract  # Tesseract OCR for number detection
+
+
+def detect_multi_measure_rest(measure_image):
+    """
+    Detects if the given measure contains a multi-measure rest.
+    This is done by looking for a thick horizontal bar and extracting numbers above it.
+
+    Returns:
+        rest_count (int): The number of measures in the multi-measure rest (1 if no multi-measure rest is found).
+    """
+    # Binarize the image to enhance detection
+    _, binary = cv2.threshold(measure_image, 128, 255, cv2.THRESH_BINARY_INV)
+
+    # Detect thick horizontal bars
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 2))
+    thick_bars = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
+
+    # Find contours of thick bars
+    contours, _ = cv2.findContours(thick_bars, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 1  # No thick bar found, assume it's a single measure
+
+    # Assume the multi-measure rest bar is the widest horizontal element
+    largest_contour = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest_contour)
+
+    # Extract the region above the thick bar to look for the number
+    number_region = measure_image[max(0, y - 50):y, x:x + w]
+
+    # Use OCR (Tesseract) to extract the number above the thick bar
+    config = "--psm 7"  # OCR mode for detecting a single word/number
+    detected_text = pytesseract.image_to_string(number_region, config=config, lang="eng")
+
+    try:
+        rest_count = int(detected_text.strip())
+        return rest_count
+    except ValueError:
+        return 1  # If OCR fails, assume it's a single measure
+
 
 def split_sheet_music_from_folder(input_folder, output_folder):
     # Ensure the output folder exists
@@ -79,12 +119,20 @@ def split_sheet_music_from_folder(input_folder, output_folder):
                 # Crop the measure
                 measure_image = staff_image[:, measure_x_min:measure_x_max]
 
-                # Save the measure
-                output_path = os.path.join(output_folder, f"measure_{measure_count}.png")
-                cv2.imwrite(output_path, measure_image)
-                measure_count += 1
+                # Detect multi-measure rest and get the measure count
+                rest_count = detect_multi_measure_rest(measure_image)
 
-    print(f"Saved {measure_count - 1} measures to '{output_folder}'.")
+                # Save the measure or skip numbering for multi-measure rests
+                if rest_count == 1:
+                    output_path = os.path.join(output_folder, f"measure_{measure_count}.png")
+                    cv2.imwrite(output_path, measure_image)
+                    measure_count += 1
+                else:
+                    # Skip measure numbers for multi-measure rest
+                    measure_count += rest_count
+
+    print(f"Saved measures to '{output_folder}'. Last measure number: {measure_count - 1}.")
+
 
 # Example usage
 input_folder = "sheet_music_pages"  # Folder containing the input sheet music images
