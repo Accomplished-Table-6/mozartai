@@ -1,2 +1,4 @@
 Tensorflow
 re
+cv2
+numpy
