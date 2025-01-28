@@ -2,3 +2,5 @@ Tensorflow
 re
 cv2
 numpy
+xml.dom
+xml.etree.Elementree
