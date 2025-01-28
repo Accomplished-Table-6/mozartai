@@ -218,16 +218,25 @@ clef_dict = {
 
 def create_musicxml(input_notation):
     score_partwise = ET.Element('score-partwise', version="3.1")
+    
+    # Add part-list section
+    part_list = ET.SubElement(score_partwise, 'part-list')
+    score_part = ET.SubElement(part_list, 'score-part', id="P1")
+    ET.SubElement(score_part, 'part-name').text = "Music"
+    
     part = ET.SubElement(score_partwise, 'part', id="P1")
     n = 1
-    current_measure = ET.SubElement(part, 'measure', number="1")
+    current_measure = ET.SubElement(part, 'measure', number=str(n))
+    total_duration = 0  # Tracks total duration of the current measure
+    
+    divisions = 8  # Default divisions
+    beats_per_measure = None  # To be set from the time signature
 
-    division = ET.SubElement(current_measure, "attributes")
-    divisions_1 = ET.SubElement(division, "divisions").text = str(8)
-    divisions = 8
+    # Add the initial <attributes> tag
+    attributes = ET.SubElement(current_measure, "attributes")
+    ET.SubElement(attributes, "divisions").text = str(divisions)
 
-    for i in range(len(input_notation)):
-        command = input_notation[i]
+    for i, command in enumerate(input_notation):
         def extractor(pattern, string):
             match = re.search(pattern, string)
             return match.group(0) if match else None
@@ -235,72 +244,75 @@ def create_musicxml(input_notation):
         if command.startswith('clef-'):
             clef_type = clef_dict.get(command)
             if clef_type:
-                clef = ET.SubElement(current_measure, 'attributes')
-                clef_element = ET.SubElement(clef, 'clef')
+                clef_element = ET.SubElement(attributes, 'clef')
                 ET.SubElement(clef_element, 'sign').text = clef_type[0]
                 ET.SubElement(clef_element, 'line').text = str(clef_type[1])
 
         elif command.startswith('keySignature-'):
             key_signature = key_sign_dict.get(command)
             if key_signature:
-                key_signature_element = ET.SubElement(current_measure, 'attributes')
-                key_thing = ET.SubElement(key_signature_element, 'key')
-                ET.SubElement(key_thing, "fifths").text = str(key_signature[0])
+                key_element = ET.SubElement(attributes, 'key')
+                ET.SubElement(key_element, "fifths").text = str(key_signature[0])
 
         elif command.startswith('timeSignature-'):
             time_signature = time_sign_dict.get(command)
             if time_signature:
-                time_signature_element = ET.SubElement(current_measure, 'attributes')
-                time_element = ET.SubElement(time_signature_element, 'time')
+                beats_per_measure = time_signature[0]
+                time_element = ET.SubElement(attributes, 'time')
                 ET.SubElement(time_element, "beats").text = str(time_signature[0])
                 ET.SubElement(time_element, "beat-type").text = str(time_signature[1])
 
-        elif command.startswith('multirest-'):
-            try:
-                multirest_quant = int(command.split("-")[1])
-                ms = ET.SubElement(current_measure, "attributes")
-                measure_style_element = ET.SubElement(ms, "measure-style")
-                ET.SubElement(measure_style_element, "multiple-rest").text = str(multirest_quant)
-            except ValueError:
-                print(f"Error: Invalid multirest quantity in command: {command}")
-
-        elif command.startswith('rest-'):
-            rest_info = rest_dict.get(command)
-            if rest_info[2] == 0:
-                note = ET.SubElement(current_measure, 'note')
-                ET.SubElement(note, 'rest')
-                ET.SubElement(note, 'duration').text = str(rest_info[0] * divisions)
-                ET.SubElement(note, 'type').text = rest_info[1]
-                if rest_info[2] > 0:
-                    for _ in range(rest_info[2]):
-                        ET.SubElement(note, "dot")
-
-        elif command.startswith('note-'):
+        elif command.startswith('note-') or command.startswith('rest-'):
             pitch_match = extractor(r"(-.*?_)", command)
             time_match = extractor(r"(_.*)", command)
-            note_pitch_stuff = note_pitch_dict.get(pitch_match)
-            note_time_stuff = note_time_dict.get(time_match)
-            note = ET.SubElement(current_measure, 'note')
-            pitch = ET.SubElement(note, 'pitch')
-            ET.SubElement(pitch, 'step').text = note_pitch_stuff[0]
-            ET.SubElement(pitch, "octave").text = str(note_pitch_stuff[1])
-            if note_pitch_stuff[2] != 0:
-                ET.SubElement(pitch, "alter").text = str(note_pitch_stuff[2])
-            ET.SubElement(note, 'duration').text = str(note_time_stuff[0] * divisions)
-            ET.SubElement(note, 'type').text = note_time_stuff[1]
-            if note_time_stuff[2] > 0:
-                for _ in range(note_time_stuff[2]):
+
+            if pitch_match:
+                note_pitch = note_pitch_dict.get(pitch_match)
+            else:
+                note_pitch = None
+            
+            if time_match:
+                note_time = note_time_dict.get(time_match) if command.startswith('note-') else rest_dict.get(time_match)
+            else:
+                note_time = None
+
+            if note_time:
+                note_duration = note_time[0] * divisions
+                total_duration += note_duration
+
+                # If the total duration exceeds the measure, create a new measure
+                if beats_per_measure and total_duration > beats_per_measure * divisions:
+                    total_duration = note_duration
+                    n += 1
+                    current_measure = ET.SubElement(part, 'measure', number=str(n))
+                
+                note = ET.SubElement(current_measure, 'note')
+
+                if command.startswith('note-') and note_pitch:
+                    pitch = ET.SubElement(note, 'pitch')
+                    ET.SubElement(pitch, 'step').text = note_pitch[0]
+                    ET.SubElement(pitch, 'octave').text = str(note_pitch[1])
+                    if note_pitch[2] != 0:
+                        ET.SubElement(pitch, "alter").text = str(note_pitch[2])
+                elif command.startswith('rest-'):
+                    ET.SubElement(note, 'rest')
+                
+                ET.SubElement(note, 'duration').text = str(note_duration)
+                ET.SubElement(note, 'type').text = note_time[1]
+                for _ in range(note_time[2]):
                     ET.SubElement(note, "dot")
 
         elif command == 'barline':
             n += 1
             current_measure = ET.SubElement(part, 'measure', number=str(n))
+            total_duration = 0  # Reset duration for the new measure
 
     # Convert to a pretty-printed string
     rough_string = ET.tostring(score_partwise, encoding="unicode", method="xml")
     reparsed = minidom.parseString(rough_string)
     pretty_xml = reparsed.toprettyxml(indent="  ")
     return pretty_xml
+
 
 
 # Example input notation
