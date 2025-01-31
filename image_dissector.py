@@ -44,6 +44,7 @@ def detect_multi_measure_rest(measure_image):
 
 
 def split_sheet_music_from_folder(input_folder, output_folder):
+    file_list = []
     # Ensure the output folder exists
     os.makedirs(output_folder, exist_ok=True)
 
@@ -124,14 +125,17 @@ def split_sheet_music_from_folder(input_folder, output_folder):
 
                 # Save the measure or skip numbering for multi-measure rests
                 if rest_count == 1:
+                    file_list.append(f"measure_{measure_count.png}")
                     output_path = os.path.join(output_folder, f"measure_{measure_count}.png")
                     cv2.imwrite(output_path, measure_image)
                     measure_count += 1
                 else:
                     # Skip measure numbers for multi-measure rest
+                    file_list.append(f"measure_{measure_count.png}")
                     measure_count += rest_count
 
     print(f"Saved measures to '{output_folder}'. Last measure number: {measure_count - 1}.")
+    return file_list
 
 
 # Example usage
