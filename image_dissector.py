@@ -1,144 +1,112 @@
 import cv2
 import numpy as np
 import os
-from glob import glob
-import pytesseract  # Tesseract OCR for number detection
 
+def split_sheet_music_per_measure(image_path, output_dir, multi_measure_rests=None, margin_x=5, margin_y=20):
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
 
-def detect_multi_measure_rest(measure_image):
-    """
-    Detects if the given measure contains a multi-measure rest.
-    This is done by looking for a thick horizontal bar and extracting numbers above it.
+    # Load the original image (color) and a grayscale version for processing
+    original_image = cv2.imread(image_path)  # Load original image in color (to preserve quality)
+    gray_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)  # Load grayscale image for processing
 
-    Returns:
-        rest_count (int): The number of measures in the multi-measure rest (1 if no multi-measure rest is found).
-    """
-    # Binarize the image to enhance detection
-    _, binary = cv2.threshold(measure_image, 128, 255, cv2.THRESH_BINARY_INV)
+    if original_image is None or gray_image is None:
+        print("Error: Could not load image.")
+        return []
 
-    # Detect thick horizontal bars
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 2))
-    thick_bars = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
+    # Binarize the grayscale image
+    _, binary = cv2.threshold(gray_image, 135, 255, cv2.THRESH_BINARY_INV)
 
-    # Find contours of thick bars
-    contours, _ = cv2.findContours(thick_bars, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return 1  # No thick bar found, assume it's a single measure
+    # Detect horizontal lines (staff lines)
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
+    detected_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
 
-    # Assume the multi-measure rest bar is the widest horizontal element
-    largest_contour = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest_contour)
+    # Find contours of staff lines
+    contours, _ = cv2.findContours(detected_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    staff_lines = sorted(contours, key=lambda c: cv2.boundingRect(c)[1])  # Sort by y-coordinate
+    print(f"Detected {len(staff_lines)} staff lines in {image_path}")
 
-    # Extract the region above the thick bar to look for the number
-    number_region = measure_image[max(0, y - 50):y, x:x + w]
+    # Group staff lines into sets (1 set = 1 staff)
+    staff_groups = []
+    group = []
+    prev_y = None
+    for contour in staff_lines:
+        x, y, w, h = cv2.boundingRect(contour)
+        if prev_y is None or abs(y - prev_y) < 20:  # Group nearby lines
+            group.append((x, y, w, h))
+        else:
+            staff_groups.append(group)
+            group = [(x, y, w, h)]
+        prev_y = y
+    if group:
+        staff_groups.append(group)
 
-    # Use OCR (Tesseract) to extract the number above the thick bar
-    config = "--psm 7"  # OCR mode for detecting a single word/number
-    detected_text = pytesseract.image_to_string(number_region, config=config, lang="eng")
+    # Initialize measure count and file list
+    measure_count = 0
+    all_filenames = []  # List to store all generated filenames
 
-    try:
-        rest_count = int(detected_text.strip())
-        return rest_count
-    except ValueError:
-        return 1  # If OCR fails, assume it's a single measure
+    # Crop each staff into individual measures
+    for i, staff in enumerate(staff_groups):
+        # Compute staff bounding box with margins
+        x_min = max(min([x for x, y, w, h in staff]) - margin_x, 0)
+        x_max = min(max([x + w for x, y, w, h in staff]) + margin_x, gray_image.shape[1])
+        y_min = max(min([y for x, y, w, h in staff]) - margin_y, 0)
+        y_max = min(max([y + h for x, y, w, h in staff]) + margin_y, gray_image.shape[0])
 
+        # Crop the staff from the grayscale image (for measure detection)
+        staff_image = binary[y_min:y_max, x_min:x_max]
 
-def split_sheet_music_from_folder(input_folder, output_folder):
-    file_list = []
-    # Ensure the output folder exists
-    os.makedirs(output_folder, exist_ok=True)
+        # Detect vertical lines (measure boundaries)
+        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+        detected_columns = cv2.morphologyEx(staff_image, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
 
-    # Get all image file paths from the input folder
-    image_files = sorted(glob(os.path.join(input_folder, "*.png")) + 
-                         glob(os.path.join(input_folder, "*.jpg")) + 
-                         glob(os.path.join(input_folder, "*.jpeg")))
-    
-    if not image_files:
-        print("Error: No images found in the input folder.")
-        return
+        # Find contours for measure splitting
+        column_contours, _ = cv2.findContours(detected_columns, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        column_boundaries = sorted([cv2.boundingRect(c)[0] for c in column_contours])
 
-    measure_count = 1  # Start the measure numbering at 1
-
-    for image_file in image_files:
-        print(f"Processing {image_file}...")
-
-        # Load the image
-        image = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-        if image is None:
-            print(f"Error: Could not load image {image_file}. Skipping...")
+        # Ensure we include the first boundary (left edge)
+        if len(column_boundaries) == 0:
+            print(f"Warning: No measure boundaries detected in staff {i + 1}.")
             continue
 
-        # Binarize the image
-        _, binary = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY_INV)
+        column_boundaries.insert(0, 0)  # Add leftmost boundary
+        print(f"Staff {i + 1}: Detected {len(column_boundaries) - 1} measure boundaries (including the first).")
 
-        # Detect horizontal lines (staff lines)
-        horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-        detected_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+        # Split staff into individual measures
+        for j in range(len(column_boundaries) - 1):
+            measure_x_min = max(column_boundaries[j] - margin_x, 0)
+            measure_x_max = min(column_boundaries[j + 1] + margin_x, staff_image.shape[1])
 
-        # Find contours of staff lines
-        contours, _ = cv2.findContours(detected_lines, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        staff_lines = sorted(contours, key=lambda c: cv2.boundingRect(c)[1])  # Sort by y-coordinate
+            # Apply cropping on the **original** image instead of the binarized one
+            measure_image = original_image[y_min:y_max, x_min + measure_x_min:x_min + measure_x_max]
 
-        # Group staff lines into sets (1 set = 1 staff)
-        staff_groups = []
-        group = []
-        prev_y = None
-        for contour in staff_lines:
-            x, y, w, h = cv2.boundingRect(contour)
-            if prev_y is None or abs(y - prev_y) < 20:  # Group nearby lines
-                group.append((x, y, w, h))
-            else:
-                staff_groups.append(group)
-                group = [(x, y, w, h)]
-            prev_y = y
-        if group:
-            staff_groups.append(group)
+            if measure_image.size == 0:
+                print(f"Warning: Measure image for measure {measure_count + 1} is empty.")
+                continue
 
-        # Crop each staff into individual measures
-        for staff in staff_groups:
-            x_min = min([x for x, y, w, h in staff])
-            x_max = max([x + w for x, y, w, h in staff])
-            y_min = min([y for x, y, w, h in staff])
-            y_max = max([y + h for x, y, w, h in staff])
+            # Check for multi-measure rests
+            duration = 1  # Default duration if not a multi-measure rest
+            measure_number = measure_count + 1
+            if multi_measure_rests:
+                for rest in multi_measure_rests:
+                    if rest[0] == measure_number:
+                        duration = rest[1]
+                        break
 
-            # Crop the staff
-            staff_image = binary[y_min:y_max, x_min:x_max]
+            # Save the cropped measure from the original image
+            output_path = os.path.join(output_dir, f"measure_{measure_number}.png")
+            cv2.imwrite(output_path, measure_image)
+            all_filenames.append(output_path)  # Store the filename
+            measure_count += duration  # Increment measure count by duration
 
-            # Detect vertical lines (measure boundaries)
-            vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-            detected_columns = cv2.morphologyEx(staff_image, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
-
-            # Find contours for measure splitting
-            column_contours, _ = cv2.findContours(detected_columns, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            column_boundaries = sorted([cv2.boundingRect(c)[0] for c in column_contours])
-
-            # Split staff into individual measures
-            for j in range(len(column_boundaries) - 1):
-                measure_x_min = column_boundaries[j]
-                measure_x_max = column_boundaries[j + 1]
-
-                # Crop the measure
-                measure_image = staff_image[:, measure_x_min:measure_x_max]
-
-                # Detect multi-measure rest and get the measure count
-                rest_count = detect_multi_measure_rest(measure_image)
-
-                # Save the measure or skip numbering for multi-measure rests
-                if rest_count == 1:
-                    file_list.append(f"measure_{measure_count.png}")
-                    output_path = os.path.join(output_folder, f"measure_{measure_count}.png")
-                    cv2.imwrite(output_path, measure_image)
-                    measure_count += 1
-                else:
-                    # Skip measure numbers for multi-measure rest
-                    file_list.append(f"measure_{measure_count.png}")
-                    measure_count += rest_count
-
-    print(f"Saved measures to '{output_folder}'. Last measure number: {measure_count - 1}.")
-    return file_list
-
+    print(f"Saved {measure_count} measures to '{output_dir}'.")
+    return all_filenames  # Return the list of filenames
 
 # Example usage
-input_folder = "sheet_music_pages"  # Folder containing the input sheet music images
-output_folder = "output_measures"   # Folder to save the measures
-split_sheet_music_from_folder(input_folder, output_folder)
+image_path = "Data/Example/Capture.PNG"
+output_dir = "Data/Temp"
+# Define multi-measure rests as nested list: [measure_number, duration]
+multi_measure_rests = []  # Example: measure 1 is 2 measures long, measure 4 is 3 measures long
+
+file_list = split_sheet_music_per_measure(image_path, output_dir, multi_measure_rests, margin_x=5, margin_y=20)
+print("Generated files:", file_list)
