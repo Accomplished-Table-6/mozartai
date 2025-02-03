@@ -57,7 +57,7 @@ def split_sheet_music_per_measure(image_path, output_dir, multi_measure_rests=No
         staff_image = binary[y_min:y_max, x_min:x_max]
 
         # Detect vertical lines (measure boundaries)
-        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 16))
         detected_columns = cv2.morphologyEx(staff_image, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
 
         # Find contours for measure splitting
@@ -103,7 +103,7 @@ def split_sheet_music_per_measure(image_path, output_dir, multi_measure_rests=No
     return all_filenames  # Return the list of filenames
 
 # Example usage
-image_path = "Data/Example/Capture.PNG"
+image_path = "Data/Example/Capture.png"
 output_dir = "Data/Temp"
 # Define multi-measure rests as nested list: [measure_number, duration]
 multi_measure_rests = []  # Example: measure 1 is 2 measures long, measure 4 is 3 measures long

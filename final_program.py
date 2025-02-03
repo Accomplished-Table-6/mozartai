@@ -7,7 +7,7 @@ import os
 
 image_path = "Data/Example/Capture.png"
 Temp_path = "Data/Temp"
-model_path = "Models/semantic_model.meta"
+model_path = "Models/Models/semantic_model.meta"
 voc_file_path = "Data/vocabulary_semantic.txt"
 measure_list = []
 file_list = imd.split_sheet_music_per_measure(image_path, Temp_path, multi_measure_rests=[], margin_x=5, margin_y=20)
