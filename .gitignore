@@ -1,5 +1,7 @@
 # ignore all .meta files
 *.meta
+*.data-00000-of-00001
+*.index
 # ignore all files in /Temp
 /Data/Temp
 /Models
