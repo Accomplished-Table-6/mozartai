@@ -5,7 +5,7 @@ import image_dissector as imd
 import os
 
 
-image_path = "Data/Example/Capture.PNG"
+image_path = "Data/Example/Capture.png"
 Temp_path = "Data/Temp"
 model_path = "Models/semantic_model.meta"
 voc_file_path = "Data/vocabulary_semantic.txt"
