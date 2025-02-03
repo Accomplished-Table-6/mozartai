@@ -2,3 +2,4 @@
 *.meta
 # ignore all files in /Temp
 /Data/Temp
+/Models
